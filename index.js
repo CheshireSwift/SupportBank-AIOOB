@@ -41,8 +41,8 @@ for (let i = 2; i < process.argv.length; i++) {
 
 readlineSync.promptLoop(processCommand);
 
-function parseCSV() {
-    const csv = fs.readFileSync(process.argv[2], { encoding: 'UTF-8' });
+function parseCSV(fileName, accounts, transactions) {
+    const csv = fs.readFileSync(fileName, { encoding: 'UTF-8' });
     if (!csv) {
         console.log("The supplied csv file couldn't be read.");
         process.exit(1);
@@ -85,7 +85,7 @@ function processCommand(input) {
             let account = accounts[accountName];
             for (let i = 0; i < account.transactions.length; i++) {
                 const transaction = account.transactions[i];
-                console.log((transaction.amount / 100).toFixed(2) + " from " + transaction.srcAccount.name + " to " + transaction.dstAccount.name + " for " + transaction.reason);
+                console.log(transaction.date.format('DD/MM/YYYY') + " " + (transaction.amount / 100).toFixed(2) + " from " + transaction.srcAccount.name + " to " + transaction.dstAccount.name + " for " + transaction.reason);
             }
         } else {
             console.log('The specified account doesn\'t exist');
