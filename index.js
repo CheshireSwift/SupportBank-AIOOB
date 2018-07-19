@@ -43,55 +43,80 @@ log4js.configure({
 });
 const logger = log4js.getLogger('index.js');
 logger.info('Logging Initialised');
-logger.info('Args: ' + process.argv);
 
-if (process.argv.length < 3) {
-    console.log('You must supply at least one csv file to read from');
+if (process.argv.length > 2) {
+    console.log('Command line arguments not supported.');
     process.exit(1);
 }
 
 const accounts = new Map();
 const transactions = [];
-for (let i = 2; i < process.argv.length; i++) {
-    const fileName = process.argv[i];
-    logger.debug('Loading file: ' + fileName);
-    parseCSV(fileName, accounts, transactions);
-}
-
 readlineSync.promptLoop(processCommand);
 
-function parseCSV(fileName, accounts, transactions) {
-    const csv = fs.readFileSync(fileName, {encoding: 'UTF-8'});
-    if (!csv) {
-        logger.fatal(`${fileName} couldn't be read, obtained ${csv}`);
+function parseFile(fileName) {
+    const file = fs.readFileSync(fileName, {encoding: 'UTF-8'});
+    if (!file) {
+        logger.fatal(`${fileName} couldn't be read, obtained ${file}`);
         console.log(`The supplied csv file ${fileName} couldn't be read.`);
         process.exit(1);
     }
-    const records = parse(csv, {columns: true});
+
+    let records;
+    if (fileName.endsWith('csv')) {
+        logger.info(`Importing file ${fileName} detceted type csv.`);
+        records = parseCSV(file);
+    } else if (fileName.endsWith('json')) {
+        logger.info(`Importing file ${fileName} detceted type json.`);
+        records = parseJSON(file);
+    } else {
+        logger.warn(`Failed to import file ${fileName} unsupported type.`);
+        console.log('Unsupported filetype');
+        return;
+    }
 
     for (let i = 0; i < records.length; i++) {
         const record = records[i];
         logger.debug(`Importing transaction: ${JSON.stringify(record)}`);
-        const date = moment(record.Date, 'DD/MM/YYYY');
+        const date = record.date;
         if (!date.isValid()) {
             logger.warn(`Invalid date in ${fileName} got ${JSON.stringify(record)}`);
             console.log(`Invalid record in ${fileName} due to bad date, skipping.`);
             continue;
         }
-        const srcAccount = getOrCreateAccount(accounts, record.From);
-        const dstAccount = getOrCreateAccount(accounts, record.To);
-        const amount = Math.round(100 * parseFloat(record.Amount));
+        const srcAccount = getOrCreateAccount(record.from);
+        const dstAccount = getOrCreateAccount(record.to);
+        const amount = Math.round(100 * parseFloat(record.amount));
         if (!amount) {
             logger.warn(`Invalid amount in ${fileName} got ${JSON.stringify(record)}`);
             console.log(`Invalid record in ${fileName} due to bad amount, skipping.`);
             continue;
         }
-        const transaction = new Transaction(srcAccount, dstAccount, date, record.Narrative, amount);
+        const transaction = new Transaction(srcAccount, dstAccount, date, record.reason, amount);
         transactions.push(transaction);
     }
 }
 
-function getOrCreateAccount(accounts, name) {
+function parseCSV(input) {
+    return parse(input, {columns: true}).map(record => ({
+        date: moment(record.Date, 'DD/MM/YYYY'),
+        from: record.From,
+        to: record.To,
+        amount: parseFloat(record.Amount),
+        reason: record.Narrative,
+    }));
+}
+
+function parseJSON(input) {
+    return JSON.parse(input).map(record => ({
+        date: moment(record.Date),
+        from: record.FromAccount,
+        to: record.ToAccount,
+        amount: parseFloat(record.Amount),
+        reason: record.Narrative,
+    }));
+}
+
+function getOrCreateAccount(name) {
     if (!accounts.has(name)) {
         accounts.set(name, new Account(name));
     }
@@ -102,8 +127,11 @@ function processCommand(input) {
     if (input == 'Quit') {
         logger.info('Quitting');
         return true;
-    }
-    if (input.startsWith('List ')) {
+    } else if (input.startsWith('Import ')) {
+        const fileName = input.slice(7);
+        logger.debug(`Importing file: ${fileName}`);
+        parseFile(fileName);
+    } else if (input.startsWith('List ')) {
         const accountName = input.slice(5);
         logger.debug(`List command received for account: ${accountName}`);
         if (accountName == 'All') {
@@ -115,12 +143,12 @@ function processCommand(input) {
             console.log('The specified account doesn\'t exist');
         }
     } else {
-        printHelp();
+        printHelp(input);
     }
     return false;
 }
 
-function printAllAccounts(accounts) {
+function printAllAccounts() {
     logger.debug('Listing all accounts.');
     console.log("All accounts:");
     accounts.forEach(account => {
@@ -130,9 +158,8 @@ function printAllAccounts(accounts) {
 }
 
 function printAccountInfo(account) {
-    logger.debug(`Listing transactions for: ${accountName}`);
-    console.log(`Transactions involving ${accountName}:`);
-    let account = accounts.get(accountName);
+    logger.debug(`Listing transactions for: ${account.name}`);
+    console.log(`Transactions involving ${account.name}:`);
     for (let i = 0; i < account.transactions.length; i++) {
         const transaction = account.transactions[i];
         const date = transaction.date.format('DD/MM/YYYY');
@@ -141,10 +168,11 @@ function printAccountInfo(account) {
     }
 }
 
-function printHelp() {
-    logger.debug('Unrecognised command: ' + input);
+function printHelp(input) {
+    logger.debug(`Unrecognised command: ${input}`);
     console.log(`
 The available commands are:
+Import [File]: Imports the transactions in the specified file
 List All: Prints the name of every account and the balance
 List [Account]: Prints a list of all transactions associated with the account
 Quit: Exits the program.
