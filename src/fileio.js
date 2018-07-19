@@ -4,11 +4,11 @@ const csvToJs = require('csv-parse/lib/sync');
 const xmlToJs = require('xml-js').xml2js;
 const moment = require('moment');
 
-const { Account, Transaction } = require('./data.js');
+const Account = require('./data.js');
 
 const logger = log4js.getLogger('parser.js');
 
-function parseFile(fileName, accounts, transactions) {
+function parseFile(fileName, accounts) {
     const file = fs.readFileSync(fileName, {encoding: 'utf8'});
     if (!file) {
         logger.fatal(`${fileName} couldn't be read, obtained ${file}`);
@@ -49,8 +49,7 @@ function parseFile(fileName, accounts, transactions) {
             console.log(`Invalid record in ${fileName} due to bad amount, skipping.`);
             continue;
         }
-        const transaction = new Transaction(srcAccount, dstAccount, date, record.reason, amount);
-        transactions.push(transaction);
+        srcAccount.pay(dstAccount, date, record.reason, amount);
     }
 }
 
@@ -92,14 +91,8 @@ function parseXML(input) {
     }));
 }
 
-function writeFile(fileName, transactions) {
-    const file = JSON.stringify(transactions.map(record => ({
-        Date: record.date,
-        FromAccount: record.srcAccount.name,
-        ToAccount: record.dstAccount.name,
-        Narrative: record.reason,
-        Amount: (record.amount / 100).toFixed(2),
-    })), null, 2);
+function writeFile(fileName, accounts) {
+    const file = Array.from(accounts.values()).map(account => account.prettyPrint()).join('\n\n');
     fs.writeFileSync(fileName, file, {encoding: 'utf8'});
 }
 

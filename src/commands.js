@@ -3,18 +3,18 @@ const logger = log4js.getLogger('commands.js');
 
 const { parseFile, writeFile } = require ('./fileio.js');
 
-function processCommand(input, accounts, transactions) {
+function processCommand(input, accounts) {
     if (input == 'Quit') {
         logger.info('Quitting');
         return true;
     } else if (input.startsWith('Import ')) {
         const fileName = input.slice(7);
         logger.debug(`Importing file: ${fileName}`);
-        parseFile(fileName, accounts, transactions);
+        parseFile(fileName, accounts);
     } else if (input.startsWith('Export ')) {
         const fileName = input.slice(7);
-        logger.debug(`Exporting all transactions to ${fileName}`);
-        writeFile(fileName, transactions);
+        logger.debug(`Exporting accounts to ${fileName}`);
+        writeFile(fileName, accounts);
     } else if (input.startsWith('List ')) {
         const accountName = input.slice(5);
         logger.debug(`List command received for account: ${accountName}`);
@@ -36,19 +36,13 @@ function printAllAccounts(accounts) {
     console.log("All accounts:");
     accounts.forEach(account => {
         const balance = (account.balance / 100).toFixed(2);
-        console.log(`${account.name} owes ${balance} in total`);
+        console.log(`${account.name} owes ${balance}`);
     });
 }
 
 function printAccountInfo(account) {
-    logger.debug(`Listing transactions for: ${account.name}`);
-    console.log(`Transactions involving ${account.name}:`);
-    for (let i = 0; i < account.transactions.length; i++) {
-        const transaction = account.transactions[i];
-        const date = transaction.date.format('DD/MM/YYYY');
-        const amount = (transaction.amount / 100).toFixed(2);
-        console.log(`[${date}] ${amount} from ${transaction.srcAccount.name} to ${transaction.dstAccount.name} for ${transaction.reason}`);
-    }
+    logger.debug(`Listing Account info for: ${account.name}`);
+    console.log(account.prettyPrint());
 }
 
 function printHelp(input) {

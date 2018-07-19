@@ -25,5 +25,4 @@ if (process.argv.length > 2) {
 }
 
 const accounts = new Map();
-const transactions = [];
-readlineSync.promptLoop((input) => processCommand(input, accounts, transactions));
+readlineSync.promptLoop((input) => processCommand(input, accounts));
