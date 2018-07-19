@@ -1,23 +1,28 @@
 class Account {
     constructor(name) {
         this.name = name;
-        this.balance = 0;
         this.transactions = [];
+    }
+
+    get balance() {
+        return this.transactions.reduce((acc, transaction) => {
+            if (transaction.dstAccount === this) {
+                return acc + transaction.amount;
+            } else {
+                return acc - transaction.amount;
+            }
+        }, 0);
     }
 
     pay(account, date, reason, amount) {
         const transaction = new Transaction(this, account, date, reason, amount);
         this.transactions.push(transaction);
         account.transactions.push(transaction);
-
-        this.balance -= amount;
-        account.balance += amount;
     }
 
     prettyPrint() {
         return `
 Account: ${this.name}
-Balance: ${(this.balance / 100).toFixed(2)}
 Transactions:
   ${this.transactions.map(transaction => transaction.prettyPrint()).join('\n  ')}
         `.trim();
