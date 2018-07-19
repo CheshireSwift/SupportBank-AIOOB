@@ -9,28 +9,33 @@ const Account = require('./data.js');
 const logger = log4js.getLogger('parser.js');
 
 function parseFile(fileName, accounts) {
-    const file = fs.readFileSync(fileName, {encoding: 'utf8'});
+    let file;
+    try {
+        file = fs.readFileSync(fileName, {encoding: 'utf8'});
+    } catch (error) {
+        console.log(`${fileName} couldn't be read: ${error.message}`)
+        logger.warn(error);
+        return;
+    }
     if (!file) {
         logger.fatal(`${fileName} couldn't be read, obtained ${file}`);
-        console.log(`The supplied csv file ${fileName} couldn't be read.`);
+        console.log(`The supplied file ${fileName} couldn't be read.`);
         process.exit(1);
     }
 
-    let records;
-    if (fileName.endsWith('.csv')) {
-        logger.info(`Importing file ${fileName} detected type csv.`);
-        records = parseCSV(file);
-    } else if (fileName.endsWith('.json')) {
-        logger.info(`Importing file ${fileName} detected type json.`);
-        records = parseJSON(file);
-    } else if (fileName.endsWith('.xml')) {
-        logger.info(`Importing file ${fileName} detected type xml.`);
-        records = parseXML(file);
-    } else {
+    const parsers = {
+        'csv': parseCSV,
+        'json': parseJSON,
+        'xml': parseXML,
+    }
+    const extension = fileName.substring(fileName.lastIndexOf('.') + 1);
+    if (!parsers[extension]) {
         logger.warn(`Failed to import file ${fileName} unsupported type.`);
         console.log('Unsupported filetype.');
         return;
     }
+    logger.info(`Importing file ${fileName} detected type ${extension}.`);
+    const records = parsers[extension](file);
 
     for (let i = 0; i < records.length; i++) {
         const record = records[i];
@@ -92,8 +97,14 @@ function parseXML(input) {
 }
 
 function writeFile(fileName, accounts) {
+    logger.info(`Writing accounts to ${fileName}`);
     const file = Array.from(accounts.values()).map(account => account.prettyPrint()).join('\n\n');
-    fs.writeFileSync(fileName, file, {encoding: 'utf8'});
+    try {
+        fs.writeFileSync(fileName, file, {encoding: 'utf8'});
+    } catch(error) {
+        logger.error(error);
+        console.log(`${fileName} couldn't be written: ${error}`);
+    }
 }
 
 module.exports = {
