@@ -2,12 +2,13 @@ const fs = require('fs');
 const parse = require('csv-parse/lib/sync');
 const readlineSync = require('readline-sync');
 const moment = require('moment');
+const log4js = require('log4js');
 
 class Account {
     constructor(name) {
         this.name = name;
         this.balance = 0;
-        this.transactions = []; 
+        this.transactions = [];
     }
 }
 
@@ -19,7 +20,6 @@ class Transaction {
         this.reason = reason;
         this.amount = amount;
 
-        
         srcAccount.transactions.push(this);
         dstAccount.transactions.push(this);
         srcAccount.balance -= amount;
@@ -27,71 +27,126 @@ class Transaction {
     }
 }
 
+log4js.configure({
+    appenders: {
+        file: {
+            type: 'fileSync',
+            filename: 'logs/debug.log'
+        }
+    },
+    categories: {
+        default: {
+            appenders: ['file'],
+            level: 'debug'
+        }
+    }
+});
+const logger = log4js.getLogger('index.js');
+logger.info('Logging Initialised');
+logger.info('Args: ' + process.argv);
+
 if (process.argv.length < 3) {
-    console.log("You must supply at least one csv file to read from");
+    console.log('You must supply at least one csv file to read from');
     process.exit(1);
 }
 
-const accounts = {};
+const accounts = new Map();
 const transactions = [];
 for (let i = 2; i < process.argv.length; i++) {
     const fileName = process.argv[i];
+    logger.debug('Loading file: ' + fileName);
     parseCSV(fileName, accounts, transactions);
 }
 
 readlineSync.promptLoop(processCommand);
 
 function parseCSV(fileName, accounts, transactions) {
-    const csv = fs.readFileSync(fileName, { encoding: 'UTF-8' });
+    const csv = fs.readFileSync(fileName, {encoding: 'UTF-8'});
     if (!csv) {
-        console.log("The supplied csv file couldn't be read.");
+        logger.fatal(`${fileName} couldn't be read, obtained ${csv}`);
+        console.log(`The supplied csv file ${fileName} couldn't be read.`);
         process.exit(1);
     }
-    const records = parse(csv, { columns: true });
+    const records = parse(csv, {columns: true});
 
     for (let i = 0; i < records.length; i++) {
         const record = records[i];
+        logger.debug(`Importing transaction: ${JSON.stringify(record)}`);
         const date = moment(record.Date, 'DD/MM/YYYY');
-        const srcAccount = getOrInsert(accounts, record.From, new Account(record.From));
-        const dstAccount = getOrInsert(accounts, record.To, new Account(record.To));
-        const transaction = new Transaction(srcAccount, dstAccount, date, record.Narrative, Math.round(100 * parseFloat(record.Amount)));
+        if (!date.isValid()) {
+            logger.warn(`Invalid date in ${fileName} got ${JSON.stringify(record)}`);
+            console.log(`Invalid record in ${fileName} due to bad date, skipping.`);
+            continue;
+        }
+        const srcAccount = getOrCreateAccount(accounts, record.From);
+        const dstAccount = getOrCreateAccount(accounts, record.To);
+        const amount = Math.round(100 * parseFloat(record.Amount));
+        if (!amount) {
+            logger.warn(`Invalid amount in ${fileName} got ${JSON.stringify(record)}`);
+            console.log(`Invalid record in ${fileName} due to bad amount, skipping.`);
+            continue;
+        }
+        const transaction = new Transaction(srcAccount, dstAccount, date, record.Narrative, amount);
         transactions.push(transaction);
     }
 }
 
-function getOrInsert(dict, key, newValue) {
-    if (!(key in dict)) {
-        dict[key] = newValue;
+function getOrCreateAccount(accounts, name) {
+    if (!accounts.has(name)) {
+        accounts.set(name, new Account(name));
     }
-    return dict[key];
+    return accounts.get(name);
 }
 
 function processCommand(input) {
     if (input == 'Quit') {
+        logger.info('Quitting');
         return true;
     }
     if (input.startsWith('List ')) {
         const accountName = input.slice(5);
+        logger.debug(`List command received for account: ${accountName}`);
         if (accountName == 'All') {
-            console.log("All accounts:");
-            for (const account in accounts) {
-                if (accounts.hasOwnProperty(account)) {
-                    const element = accounts[account];
-                    console.log(element.name + " owes " + (element.balance / 100).toFixed(2));
-                }
-            }
-        } else if (accountName in accounts) {
-            console.log('Transactions involving ' + accountName + ":");
-            let account = accounts[accountName];
-            for (let i = 0; i < account.transactions.length; i++) {
-                const transaction = account.transactions[i];
-                console.log(transaction.date.format('DD/MM/YYYY') + " " + (transaction.amount / 100).toFixed(2) + " from " + transaction.srcAccount.name + " to " + transaction.dstAccount.name + " for " + transaction.reason);
-            }
+            printAllAccounts();
+        } else if (accounts.has(accountName)) {
+            printAccountInfo(accounts.get(accountName));
         } else {
+            logger.debug(`List command received for invalid account: ${accountName}`);
             console.log('The specified account doesn\'t exist');
         }
     } else {
-        console.log('The available commands are:\nList All: Prints the name of every account and the balance\nList [Account]: Prints a list of all transactions associated with the account\nQuit: Exits the program.');
+        printHelp();
     }
     return false;
+}
+
+function printAllAccounts(accounts) {
+    logger.debug('Listing all accounts.');
+    console.log("All accounts:");
+    accounts.forEach(account => {
+        const balance = (account.balance / 100).toFixed(2);
+        console.log(`${account.name} owes ${balance} in total`);
+    });
+}
+
+function printAccountInfo(account) {
+    logger.debug(`Listing transactions for: ${accountName}`);
+    console.log(`Transactions involving ${accountName}:`);
+    let account = accounts.get(accountName);
+    for (let i = 0; i < account.transactions.length; i++) {
+        const transaction = account.transactions[i];
+        const date = transaction.date.format('DD/MM/YYYY');
+        const amount = (transaction.amount / 100).toFixed(2);
+        console.log(`[${date}] ${amount} from ${transaction.srcAccount.name} to ${transaction.dstAccount.name} for ${transaction.reason}`);
+    }
+}
+
+function printHelp() {
+    logger.debug('Unrecognised command: ' + input);
+    console.log(`
+The available commands are:
+List All: Prints the name of every account and the balance
+List [Account]: Prints a list of all transactions associated with the account
+Quit: Exits the program.
+    `.trim());
 }

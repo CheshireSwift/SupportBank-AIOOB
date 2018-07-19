@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "csv-parse": "^2.5.0",
+    "log4js": "^3.0.0",
     "moment": "^2.22.2",
     "readline-sync": "^1.4.9"
   }
