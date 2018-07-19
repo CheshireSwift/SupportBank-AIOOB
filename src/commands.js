@@ -17,7 +17,6 @@ function processCommand(input, accounts) {
         writeFile(fileName, accounts);
     } else if (input.startsWith('List ')) {
         const accountName = input.slice(5);
-        logger.debug(`List command received for account: ${accountName}`);
         if (accountName == 'All') {
             printAllAccounts(accounts);
         } else if (accounts.has(accountName)) {
