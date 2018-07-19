@@ -1,5 +1,6 @@
 const fs = require('fs');
-const parse = require('csv-parse/lib/sync');
+const csvToJs = require('csv-parse/lib/sync');
+const xmlToJs = require('xml-js').xml2js;
 const readlineSync = require('readline-sync');
 const moment = require('moment');
 const log4js = require('log4js');
@@ -62,13 +63,16 @@ function parseFile(fileName) {
     }
 
     let records;
-    if (fileName.endsWith('csv')) {
-        logger.info(`Importing file ${fileName} detceted type csv.`);
+    if (fileName.endsWith('.csv')) {
+        logger.info(`Importing file ${fileName} detected type csv.`);
         records = parseCSV(file);
-    } else if (fileName.endsWith('json')) {
-        logger.info(`Importing file ${fileName} detceted type json.`);
+    } else if (fileName.endsWith('.json')) {
+        logger.info(`Importing file ${fileName} detected type json.`);
         records = parseJSON(file);
-    } else {
+    } else if (fileName.endsWith('.xml')) {
+        logger.info(`Importing file ${fileName} detected type xml.`);
+        records = parseXML(file);
+    }else {
         logger.warn(`Failed to import file ${fileName} unsupported type.`);
         console.log('Unsupported filetype');
         return;
@@ -97,7 +101,7 @@ function parseFile(fileName) {
 }
 
 function parseCSV(input) {
-    return parse(input, {columns: true}).map(record => ({
+    return csvToJs(input, {columns: true}).map(record => ({
         date: moment(record.Date, 'DD/MM/YYYY'),
         from: record.From,
         to: record.To,
@@ -113,6 +117,17 @@ function parseJSON(input) {
         to: record.ToAccount,
         amount: parseFloat(record.Amount),
         reason: record.Narrative,
+    }));
+}
+
+function parseXML(input) {
+    let parsed = xmlToJs(input, {compact: true});
+    return parsed.TransactionList.SupportTransaction.map(record => ({
+        date: moment({year: 1900, month: 0, day: 1}).add(parseInt(record._attributes.Date), 'd'),
+        from: record.Parties.From._text,
+        to: record.Parties.To._text,
+        amount: parseFloat(record.Value._text),
+        reason: record.Description._text,
     }));
 }
 
