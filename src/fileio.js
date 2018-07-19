@@ -9,7 +9,7 @@ const { Account, Transaction } = require('./data.js');
 const logger = log4js.getLogger('parser.js');
 
 function parseFile(fileName, accounts, transactions) {
-    const file = fs.readFileSync(fileName, {encoding: 'UTF-8'});
+    const file = fs.readFileSync(fileName, {encoding: 'utf8'});
     if (!file) {
         logger.fatal(`${fileName} couldn't be read, obtained ${file}`);
         console.log(`The supplied csv file ${fileName} couldn't be read.`);
@@ -92,4 +92,18 @@ function parseXML(input) {
     }));
 }
 
-module.exports = parseFile;
+function writeFile(fileName, transactions) {
+    const file = JSON.stringify(transactions.map(record => ({
+        Date: record.date,
+        FromAccount: record.srcAccount.name,
+        ToAccount: record.dstAccount.name,
+        Narrative: record.reason,
+        Amount: (record.amount / 100).toFixed(2),
+    })), null, 2);
+    fs.writeFileSync(fileName, file, {encoding: 'utf8'});
+}
+
+module.exports = {
+    parseFile,
+    writeFile,
+};
